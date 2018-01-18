@@ -16,19 +16,37 @@ Creates a subscription in Google's pubsub queueing system. For more information 
 ## Example Usage
 
 ```hcl
+resource "google_pubsub_topic" "default-topic" {
+  name = "default-topic"
+}
+
 resource "google_pubsub_subscription" "default" {
   name  = "default-subscription"
-  topic = "default-topic"
+  topic = "${google_pubsub_topic.default-topic.name}"
 
   ack_deadline_seconds = 20
 
   push_config {
-    endpoint = "https://example.com/push"
+    push_endpoint = "https://example.com/push"
 
     attributes {
       x-goog-version = "v1"
     }
   }
+}
+```
+
+If the subscription has a topic in a different project:
+
+```hcl
+resource "google_pubsub_topic" "topic-different-project" {
+  project = "another-project"
+  name = "topic-different-project"
+}
+
+resource "google_pubsub_subscription" "default" {
+  name  = "default-subscription"
+  topic = "${google_pubsub_topic.topic-different-project.id}"
 }
 ```
 
@@ -39,7 +57,7 @@ The following arguments are supported:
 * `name` - (Required) A unique name for the resource, required by pubsub.
     Changing this forces a new resource to be created.
 
-* `topic` - (Required) A topic to bind this subscription to, required by pubsub.
+* `topic` - (Required) The topic name or id to bind this subscription to, required by pubsub.
     Changing this forces a new resource to be created.
 
 - - -

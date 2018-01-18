@@ -130,7 +130,7 @@ The `boot_disk` block supports:
     alongside the new instance. Either `initialize_params` or `source` must be set.
     Structure is documented below.
 
-* `source` - (Optional) The name of the existing disk (such as those managed by
+* `source` - (Optional) The name or self_link of the existing disk (such as those managed by
     `google_compute_disk`) to attach.
 
 The `initialize_params` block supports:
@@ -144,7 +144,10 @@ The `initialize_params` block supports:
     one of: the image's `self_link`, `projects/{project}/global/images/{image}`,
     `projects/{project}/global/images/family/{family}`, `global/images/{image}`,
     `global/images/family/{family}`, `family/{family}`, `{project}/{family}`,
-    `{project}/{image}`, `{family}`, or `{image}`.
+    `{project}/{image}`, `{family}`, or `{image}`. If referred by family, the
+    images names must include the family name. For instance, the image
+    `centos-6-v20180104` includes its family name `centos-6`. These images can
+    be referred by family name here.
 
 The `scratch_disk` block supports:
 
@@ -153,7 +156,7 @@ The `scratch_disk` block supports:
 
 The `attached_disk` block supports:
 
-* `source` - (Required) The self_link of the disk to attach to this instance.
+* `source` - (Required) The name or self_link of the disk to attach to this instance.
 
 * `device_name` - (Optional) Name with which the attached disk will be accessible
     under `/dev/disk/by-id/`
@@ -188,7 +191,7 @@ The `network_interface` block supports:
     on that network). This block can be repeated multiple times. Structure
     documented below.
 
-* `alias_ip_range` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) An
+* `alias_ip_range` - (Optional) An
     array of alias IP ranges for this network interface. Can only be specified for network
     interfaces on subnet-mode networks. Structure documented below.
 
@@ -214,7 +217,8 @@ The `service_account` block supports:
     default Google Compute Engine service account is used.
 
 * `scopes` - (Required) A list of service scopes. Both OAuth2 URLs and gcloud
-    short names are supported.
+    short names are supported. To allow full access to all Cloud APIs, use the
+    `cloud-platform` scope. See a complete list of scopes [here](https://cloud.google.com/sdk/gcloud/reference/alpha/compute/instances/set-scopes#--scopes).
 
 The `scheduling` block supports:
 
@@ -229,9 +233,9 @@ The `scheduling` block supports:
 
 ---
 
-* `guest_accelerator` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) List of the type and count of accelerator cards attached to the instance. Structure documented below.
+* `guest_accelerator` - (Optional) List of the type and count of accelerator cards attached to the instance. Structure documented below.
 
-* `min_cpu_platform` - (Optional, [Beta](/docs/providers/google/index.html#beta-features)) Specifies a minimum CPU platform for the VM instance. Applicable values are the friendly names of CPU platforms, such as
+* `min_cpu_platform` - (Optional) Specifies a minimum CPU platform for the VM instance. Applicable values are the friendly names of CPU platforms, such as
 `Intel Haswell` or `Intel Skylake`. See the complete list [here](https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform).
 
 The `guest_accelerator` block supports:
@@ -272,3 +276,13 @@ exported:
 * `disk.0.disk_encryption_key_sha256` - The [RFC 4648 base64](https://tools.ietf.org/html/rfc4648#section-4)
     encoded SHA-256 hash of the [customer-supplied encryption key]
     (https://cloud.google.com/compute/docs/disks/customer-supplied-encryption) that protects this resource.
+
+## Import
+
+~> **Note:** The fields `boot_disk.0.disk_entryption_raw` and `attached_disk.*.disk_encryption_key_raw` cannot be imported automatically. The API doesn't return this information. If you are setting one of these fields in your config, you will need to update your state manually after importing the resource.
+
+Instances can be imported using the `project`, `zone` and `name`, e.g.
+
+```
+$ terraform import google_compute_instance.default gcp-project/us-central1-a/test
+```

@@ -2,7 +2,6 @@ package google
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform/helper/acctest"
@@ -13,14 +12,10 @@ import (
 
 // Add two key value pairs
 func TestAccComputeProjectMetadata_basic(t *testing.T) {
-	skipIfEnvNotSet(t,
-		[]string{
-			"GOOGLE_ORG",
-			"GOOGLE_BILLING_ACCOUNT",
-		}...,
-	)
+	t.Parallel()
 
-	billingId := os.Getenv("GOOGLE_BILLING_ACCOUNT")
+	org := getTestOrgFromEnv(t)
+	billingId := getTestBillingAccountFromEnv(t)
 	var project compute.Project
 	projectID := "terrafom-test-" + acctest.RandString(10)
 
@@ -45,14 +40,10 @@ func TestAccComputeProjectMetadata_basic(t *testing.T) {
 
 // Add three key value pairs, then replace one and modify a second
 func TestAccComputeProjectMetadata_modify_1(t *testing.T) {
-	skipIfEnvNotSet(t,
-		[]string{
-			"GOOGLE_ORG",
-			"GOOGLE_BILLING_ACCOUNT",
-		}...,
-	)
+	t.Parallel()
 
-	billingId := os.Getenv("GOOGLE_BILLING_ACCOUNT")
+	org := getTestOrgFromEnv(t)
+	billingId := getTestBillingAccountFromEnv(t)
 	var project compute.Project
 	projectID := "terrafom-test-" + acctest.RandString(10)
 
@@ -90,14 +81,10 @@ func TestAccComputeProjectMetadata_modify_1(t *testing.T) {
 
 // Add two key value pairs, and replace both
 func TestAccComputeProjectMetadata_modify_2(t *testing.T) {
-	skipIfEnvNotSet(t,
-		[]string{
-			"GOOGLE_ORG",
-			"GOOGLE_BILLING_ACCOUNT",
-		}...,
-	)
+	t.Parallel()
 
-	billingId := os.Getenv("GOOGLE_BILLING_ACCOUNT")
+	org := getTestOrgFromEnv(t)
+	billingId := getTestBillingAccountFromEnv(t)
 	var project compute.Project
 	projectID := "terraform-test-" + acctest.RandString(10)
 

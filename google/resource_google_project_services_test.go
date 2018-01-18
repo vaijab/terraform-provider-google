@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -12,11 +11,13 @@ import (
 	"github.com/hashicorp/terraform/helper/acctest"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-	"google.golang.org/api/servicemanagement/v1"
 )
 
 // Test that services can be enabled and disabled on a project
 func TestAccGoogleProjectServices_basic(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	services1 := []string{"iam.googleapis.com", "cloudresourcemanager.googleapis.com"}
 	services2 := []string{"cloudresourcemanager.googleapis.com"}
@@ -57,6 +58,9 @@ func TestAccGoogleProjectServices_basic(t *testing.T) {
 // Test that services are authoritative when a project has existing
 // sevices not represented in config
 func TestAccGoogleProjectServices_authoritative(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	services := []string{"cloudresourcemanager.googleapis.com"}
 	oobService := "iam.googleapis.com"
@@ -91,6 +95,9 @@ func TestAccGoogleProjectServices_authoritative(t *testing.T) {
 // sevices, some which are represented in the config and others
 // that are not
 func TestAccGoogleProjectServices_authoritative2(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	oobServices := []string{"iam.googleapis.com", "cloudresourcemanager.googleapis.com"}
 	services := []string{"iam.googleapis.com"}
@@ -128,14 +135,10 @@ func TestAccGoogleProjectServices_authoritative2(t *testing.T) {
 // don't end up causing diffs when they are enabled as a side-effect of a different service's
 // enablement.
 func TestAccGoogleProjectServices_ignoreUnenablableServices(t *testing.T) {
-	skipIfEnvNotSet(t,
-		[]string{
-			"GOOGLE_ORG",
-			"GOOGLE_BILLING_ACCOUNT",
-		}...,
-	)
+	t.Parallel()
 
-	billingId := os.Getenv("GOOGLE_BILLING_ACCOUNT")
+	org := getTestOrgFromEnv(t)
+	billingId := getTestBillingAccountFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	services := []string{
 		"dataproc.googleapis.com",
@@ -167,14 +170,10 @@ func TestAccGoogleProjectServices_ignoreUnenablableServices(t *testing.T) {
 }
 
 func TestAccGoogleProjectServices_manyServices(t *testing.T) {
-	skipIfEnvNotSet(t,
-		[]string{
-			"GOOGLE_ORG",
-			"GOOGLE_BILLING_ACCOUNT",
-		}...,
-	)
+	t.Parallel()
 
-	billingId := os.Getenv("GOOGLE_BILLING_ACCOUNT")
+	org := getTestOrgFromEnv(t)
+	billingId := getTestBillingAccountFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	services := []string{
 		"bigquery-json.googleapis.com",
@@ -254,7 +253,7 @@ func testProjectServicesMatch(services []string, pid string) resource.TestCheckF
 	return func(s *terraform.State) error {
 		config := testAccProvider.Meta().(*Config)
 
-		apiServices, err := getApiServices(pid, config)
+		apiServices, err := getApiServices(pid, config, ignoreProjectServices)
 		if err != nil {
 			return fmt.Errorf("Error listing services for project %q: %v", pid, err)
 		}
@@ -279,13 +278,5 @@ func testStringsToString(s []string) string {
 	}
 	r := b.String()
 	log.Printf("[DEBUG]: Converted list of strings to %s", r)
-	return b.String()
-}
-
-func testManagedServicesToString(svcs []*servicemanagement.ManagedService) string {
-	var b bytes.Buffer
-	for _, s := range svcs {
-		b.WriteString(s.ServiceName)
-	}
 	return b.String()
 }

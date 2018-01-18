@@ -5,9 +5,10 @@ import (
 	"log"
 	"strconv"
 
+	"regexp"
+
 	"github.com/hashicorp/terraform/helper/schema"
 	"google.golang.org/api/compute/v1"
-	"regexp"
 )
 
 const (
@@ -21,6 +22,10 @@ func resourceComputeTargetHttpsProxy() *schema.Resource {
 		Read:   resourceComputeTargetHttpsProxyRead,
 		Delete: resourceComputeTargetHttpsProxyDelete,
 		Update: resourceComputeTargetHttpsProxyUpdate,
+
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -55,7 +60,7 @@ func resourceComputeTargetHttpsProxy() *schema.Resource {
 				Computed: true,
 			},
 
-			"id": &schema.Schema{
+			"proxy_id": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
 			},
@@ -63,6 +68,7 @@ func resourceComputeTargetHttpsProxy() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 		},
@@ -101,7 +107,7 @@ func resourceComputeTargetHttpsProxyCreate(d *schema.ResourceData, meta interfac
 		return fmt.Errorf("Error creating TargetHttpsProxy: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Creating Target Https Proxy")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating Target Https Proxy")
 	if err != nil {
 		return err
 	}
@@ -130,7 +136,7 @@ func resourceComputeTargetHttpsProxyUpdate(d *schema.ResourceData, meta interfac
 			return fmt.Errorf("Error updating Target HTTPS proxy URL map: %s", err)
 		}
 
-		err = computeOperationWait(config, op, project, "Updating Target Https Proxy URL Map")
+		err = computeOperationWait(config.clientCompute, op, project, "Updating Target Https Proxy URL Map")
 		if err != nil {
 			return err
 		}
@@ -149,7 +155,7 @@ func resourceComputeTargetHttpsProxyUpdate(d *schema.ResourceData, meta interfac
 			return fmt.Errorf("Error updating Target Https Proxy SSL Certificates: %s", err)
 		}
 
-		err = computeOperationWait(config, op, project, "Updating Target Https Proxy SSL certificates")
+		err = computeOperationWait(config.clientCompute, op, project, "Updating Target Https Proxy SSL certificates")
 		if err != nil {
 			return err
 		}
@@ -177,8 +183,12 @@ func resourceComputeTargetHttpsProxyRead(d *schema.ResourceData, meta interface{
 	}
 
 	d.Set("ssl_certificates", proxy.SslCertificates)
+	d.Set("proxy_id", strconv.FormatUint(proxy.Id, 10))
 	d.Set("self_link", proxy.SelfLink)
-	d.Set("id", strconv.FormatUint(proxy.Id, 10))
+	d.Set("description", proxy.Description)
+	d.Set("url_map", proxy.UrlMap)
+	d.Set("name", proxy.Name)
+	d.Set("project", project)
 
 	return nil
 }
@@ -199,7 +209,7 @@ func resourceComputeTargetHttpsProxyDelete(d *schema.ResourceData, meta interfac
 		return fmt.Errorf("Error deleting TargetHttpsProxy: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Target Https Proxy")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Target Https Proxy")
 	if err != nil {
 		return err
 	}

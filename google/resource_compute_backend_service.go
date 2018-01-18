@@ -2,6 +2,8 @@ package google
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"log"
 
@@ -19,6 +21,7 @@ func resourceComputeBackendService() *schema.Resource {
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
+		SchemaVersion: 1,
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -37,13 +40,41 @@ func resourceComputeBackendService() *schema.Resource {
 				MaxItems: 1,
 			},
 
+			"iap": &schema.Schema{
+				Type:     schema.TypeList,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"oauth2_client_id": &schema.Schema{
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"oauth2_client_secret": &schema.Schema{
+							Type:      schema.TypeString,
+							Required:  true,
+							Sensitive: true,
+							DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
+								if old == fmt.Sprintf("%x", sha256.Sum256([]byte(new))) {
+									return true
+								}
+								return false
+							},
+						},
+					},
+				},
+			},
+
 			"backend": &schema.Schema{
-				Type: schema.TypeSet,
+				Type:     schema.TypeSet,
+				Optional: true,
+				Set:      resourceGoogleComputeBackendServiceBackendHash,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"group": &schema.Schema{
-							Type:     schema.TypeString,
-							Optional: true,
+							Type:             schema.TypeString,
+							Optional:         true,
+							DiffSuppressFunc: compareSelfLinkRelativePaths,
 						},
 						"balancing_mode": &schema.Schema{
 							Type:     schema.TypeString,
@@ -74,8 +105,6 @@ func resourceComputeBackendService() *schema.Resource {
 						},
 					},
 				},
-				Optional: true,
-				Set:      resourceGoogleComputeBackendServiceBackendHash,
 			},
 
 			"description": &schema.Schema{
@@ -103,6 +132,7 @@ func resourceComputeBackendService() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -148,7 +178,10 @@ func resourceComputeBackendService() *schema.Resource {
 func resourceComputeBackendServiceCreate(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
-	service := expandBackendService(d)
+	service, err := expandBackendService(d)
+	if err != nil {
+		return err
+	}
 
 	project, err := getProject(d, config)
 	if err != nil {
@@ -157,7 +190,7 @@ func resourceComputeBackendServiceCreate(d *schema.ResourceData, meta interface{
 
 	log.Printf("[DEBUG] Creating new Backend Service: %#v", service)
 	op, err := config.clientCompute.BackendServices.Insert(
-		project, &service).Do()
+		project, service).Do()
 	if err != nil {
 		return fmt.Errorf("Error creating backend service: %s", err)
 	}
@@ -168,7 +201,7 @@ func resourceComputeBackendServiceCreate(d *schema.ResourceData, meta interface{
 	d.SetId(service.Name)
 
 	// Wait for the operation to complete
-	waitErr := computeOperationWait(config, op, project, "Creating Backend Service")
+	waitErr := computeOperationWait(config.clientCompute, op, project, "Creating Backend Service")
 	if waitErr != nil {
 		// The resource didn't actually create
 		d.SetId("")
@@ -203,7 +236,8 @@ func resourceComputeBackendServiceRead(d *schema.ResourceData, meta interface{})
 	d.Set("self_link", service.SelfLink)
 	d.Set("backend", flattenBackends(service.Backends))
 	d.Set("connection_draining_timeout_sec", service.ConnectionDraining.DrainingTimeoutSec)
-
+	d.Set("iap", flattenIap(service.Iap))
+	d.Set("project", project)
 	d.Set("health_checks", service.HealthChecks)
 
 	return nil
@@ -212,7 +246,10 @@ func resourceComputeBackendServiceRead(d *schema.ResourceData, meta interface{})
 func resourceComputeBackendServiceUpdate(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
-	service := expandBackendService(d)
+	service, err := expandBackendService(d)
+	if err != nil {
+		return err
+	}
 	service.Fingerprint = d.Get("fingerprint").(string)
 
 	project, err := getProject(d, config)
@@ -222,14 +259,14 @@ func resourceComputeBackendServiceUpdate(d *schema.ResourceData, meta interface{
 
 	log.Printf("[DEBUG] Updating existing Backend Service %q: %#v", d.Id(), service)
 	op, err := config.clientCompute.BackendServices.Update(
-		project, d.Id(), &service).Do()
+		project, d.Id(), service).Do()
 	if err != nil {
 		return fmt.Errorf("Error updating backend service: %s", err)
 	}
 
 	d.SetId(service.Name)
 
-	err = computeOperationWait(config, op, project, "Updating Backend Service")
+	err = computeOperationWait(config.clientCompute, op, project, "Updating Backend Service")
 	if err != nil {
 		return err
 	}
@@ -252,7 +289,7 @@ func resourceComputeBackendServiceDelete(d *schema.ResourceData, meta interface{
 		return fmt.Errorf("Error deleting backend service: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Backend Service")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Backend Service")
 	if err != nil {
 		return err
 	}
@@ -261,14 +298,45 @@ func resourceComputeBackendServiceDelete(d *schema.ResourceData, meta interface{
 	return nil
 }
 
-func expandBackends(configured []interface{}) []*compute.Backend {
+func expandIap(configured []interface{}) *compute.BackendServiceIAP {
+	data := configured[0].(map[string]interface{})
+	iap := &compute.BackendServiceIAP{
+		Enabled:            true,
+		Oauth2ClientId:     data["oauth2_client_id"].(string),
+		Oauth2ClientSecret: data["oauth2_client_secret"].(string),
+		ForceSendFields:    []string{"Enabled", "Oauth2ClientId", "Oauth2ClientSecret"},
+	}
+
+	return iap
+}
+
+func flattenIap(iap *compute.BackendServiceIAP) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, 1)
+	if iap == nil || !iap.Enabled {
+		return result
+	}
+
+	result = append(result, map[string]interface{}{
+		"oauth2_client_id":     iap.Oauth2ClientId,
+		"oauth2_client_secret": iap.Oauth2ClientSecretSha256,
+	})
+
+	return result
+}
+
+func expandBackends(configured []interface{}) ([]*compute.Backend, error) {
 	backends := make([]*compute.Backend, 0, len(configured))
 
 	for _, raw := range configured {
 		data := raw.(map[string]interface{})
 
+		g, ok := data["group"]
+		if !ok {
+			return nil, errors.New("google_compute_backend_service.backend.group must be set")
+		}
+
 		b := compute.Backend{
-			Group: data["group"].(string),
+			Group: g.(string),
 		}
 
 		if v, ok := data["balancing_mode"]; ok {
@@ -293,7 +361,7 @@ func expandBackends(configured []interface{}) []*compute.Backend {
 		backends = append(backends, &b)
 	}
 
-	return backends
+	return backends, nil
 }
 
 func flattenBackends(backends []*compute.Backend) []map[string]interface{} {
@@ -309,27 +377,44 @@ func flattenBackends(backends []*compute.Backend) []map[string]interface{} {
 		data["max_rate"] = b.MaxRate
 		data["max_rate_per_instance"] = b.MaxRatePerInstance
 		data["max_utilization"] = b.MaxUtilization
-
 		result = append(result, data)
 	}
 
 	return result
 }
 
-func expandBackendService(d *schema.ResourceData) compute.BackendService {
+func expandBackendService(d *schema.ResourceData) (*compute.BackendService, error) {
 	hc := d.Get("health_checks").(*schema.Set).List()
 	healthChecks := make([]string, 0, len(hc))
 	for _, v := range hc {
 		healthChecks = append(healthChecks, v.(string))
 	}
 
-	service := compute.BackendService{
+	// The IAP service is enabled and disabled by adding or removing
+	// the IAP configuration block (and providing the client id
+	// and secret). We are force sending the three required API fields
+	// to enable/disable IAP at all times here, and relying on Golang's
+	// type defaults to enable or disable IAP in the existence or absence
+	// of the block, instead of checking if the block exists, zeroing out
+	// fields, etc.
+	service := &compute.BackendService{
 		Name:         d.Get("name").(string),
 		HealthChecks: healthChecks,
+		Iap: &compute.BackendServiceIAP{
+			ForceSendFields: []string{"Enabled", "Oauth2ClientId", "Oauth2ClientSecret"},
+		},
 	}
 
+	if v, ok := d.GetOk("iap"); ok {
+		service.Iap = expandIap(v.([]interface{}))
+	}
+
+	var err error
 	if v, ok := d.GetOk("backend"); ok {
-		service.Backends = expandBackends(v.(*schema.Set).List())
+		service.Backends, err = expandBackends(v.(*schema.Set).List())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if v, ok := d.GetOk("description"); ok {
@@ -363,7 +448,7 @@ func expandBackendService(d *schema.ResourceData) compute.BackendService {
 
 	service.ConnectionDraining = connectionDraining
 
-	return service
+	return service, nil
 }
 
 func resourceGoogleComputeBackendServiceBackendHash(v interface{}) int {
@@ -374,7 +459,8 @@ func resourceGoogleComputeBackendServiceBackendHash(v interface{}) int {
 	var buf bytes.Buffer
 	m := v.(map[string]interface{})
 
-	buf.WriteString(fmt.Sprintf("%s-", m["group"].(string)))
+	group, _ := getRelativePath(m["group"].(string))
+	buf.WriteString(fmt.Sprintf("%s-", group))
 
 	if v, ok := m["balancing_mode"]; ok {
 		buf.WriteString(fmt.Sprintf("%s-", v.(string)))

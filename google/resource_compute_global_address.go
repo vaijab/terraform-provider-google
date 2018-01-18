@@ -30,12 +30,13 @@ func resourceComputeGlobalAddress() *schema.Resource {
 				Type:         schema.TypeString,
 				Optional:     true,
 				ForceNew:     true,
-				ValidateFunc: validation.StringInSlice([]string{"IPV4", "IPV6"}, false),
+				ValidateFunc: validation.StringInSlice([]string{"IPV4", "IPV6", ""}, false),
 			},
 
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -74,7 +75,7 @@ func resourceComputeGlobalAddressCreate(d *schema.ResourceData, meta interface{}
 	// It probably maybe worked, so store the ID now
 	d.SetId(addr.Name)
 
-	err = computeSharedOperationWait(config, op, project, "Creating Global Address")
+	err = computeSharedOperationWait(config.clientCompute, op, project, "Creating Global Address")
 	if err != nil {
 		return err
 	}
@@ -98,6 +99,7 @@ func resourceComputeGlobalAddressRead(d *schema.ResourceData, meta interface{}) 
 	d.Set("name", addr.Name)
 	d.Set("ip_version", addr.IpVersion)
 	d.Set("address", addr.Address)
+	d.Set("project", project)
 	d.Set("self_link", ConvertSelfLinkToV1(addr.SelfLink))
 
 	return nil
@@ -118,7 +120,7 @@ func resourceComputeGlobalAddressDelete(d *schema.ResourceData, meta interface{}
 		return fmt.Errorf("Error deleting address: %s", err)
 	}
 
-	err = computeSharedOperationWait(config, op, project, "Deleting Global Address")
+	err = computeSharedOperationWait(config.clientCompute, op, project, "Deleting Global Address")
 	if err != nil {
 		return err
 	}

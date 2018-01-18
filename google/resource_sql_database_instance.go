@@ -14,6 +14,23 @@ import (
 	"google.golang.org/api/sqladmin/v1beta4"
 )
 
+var sqlDatabaseAuthorizedNetWorkSchemaElem *schema.Resource = &schema.Resource{
+	Schema: map[string]*schema.Schema{
+		"expiration_time": &schema.Schema{
+			Type:     schema.TypeString,
+			Optional: true,
+		},
+		"name": &schema.Schema{
+			Type:     schema.TypeString,
+			Optional: true,
+		},
+		"value": &schema.Schema{
+			Type:     schema.TypeString,
+			Optional: true,
+		},
+	},
+}
+
 func resourceSqlDatabaseInstance() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceSqlDatabaseInstanceCreate,
@@ -104,9 +121,8 @@ func resourceSqlDatabaseInstance() *schema.Resource {
 						"disk_autoresize": &schema.Schema{
 							Type:             schema.TypeBool,
 							Optional:         true,
+							Default:          true,
 							DiffSuppressFunc: suppressFirstGen,
-							// Set computed instead of default because this property is for second-gen only.
-							Computed: true,
 						},
 						"disk_size": &schema.Schema{
 							Type:     schema.TypeInt,
@@ -128,24 +144,10 @@ func resourceSqlDatabaseInstance() *schema.Resource {
 							Elem: &schema.Resource{
 								Schema: map[string]*schema.Schema{
 									"authorized_networks": &schema.Schema{
-										Type:     schema.TypeList,
+										Type:     schema.TypeSet,
 										Optional: true,
-										Elem: &schema.Resource{
-											Schema: map[string]*schema.Schema{
-												"expiration_time": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-												"name": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-												"value": &schema.Schema{
-													Type:     schema.TypeString,
-													Optional: true,
-												},
-											},
-										},
+										Set:      schema.HashResource(sqlDatabaseAuthorizedNetWorkSchemaElem),
+										Elem:     sqlDatabaseAuthorizedNetWorkSchemaElem,
 									},
 									"ipv4_enabled": &schema.Schema{
 										Type:     schema.TypeBool,
@@ -262,6 +264,7 @@ func resourceSqlDatabaseInstance() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -458,7 +461,7 @@ func resourceSqlDatabaseInstanceCreate(d *schema.ResourceData, meta interface{})
 
 			if vp, okp := _ipConfiguration["authorized_networks"]; okp {
 				settings.IpConfiguration.AuthorizedNetworks = make([]*sqladmin.AclEntry, 0)
-				_authorizedNetworksList := vp.([]interface{})
+				_authorizedNetworksList := vp.(*schema.Set).List()
 				for _, _acl := range _authorizedNetworksList {
 					_entry := _acl.(map[string]interface{})
 					entry := &sqladmin.AclEntry{}
@@ -625,19 +628,25 @@ func resourceSqlDatabaseInstanceCreate(d *schema.ResourceData, meta interface{})
 	// If a default root user was created with a wildcard ('%') hostname, delete it. Note that if the resource is a
 	// replica, then any users are inherited from the master instance and should be left alone.
 	if !sqlResourceIsReplica(d) {
-		users, err := config.clientSqlAdmin.Users.List(project, instance.Name).Do()
+		var users *sqladmin.UsersListResponse
+		err = retry(func() error {
+			users, err = config.clientSqlAdmin.Users.List(project, instance.Name).Do()
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("Error, attempting to list users associated with instance %s: %s", instance.Name, err)
 		}
 		for _, u := range users.Items {
 			if u.Name == "root" && u.Host == "%" {
-				op, err = config.clientSqlAdmin.Users.Delete(project, instance.Name, u.Host, u.Name).Do()
+				err = retry(func() error {
+					op, err = config.clientSqlAdmin.Users.Delete(project, instance.Name, u.Host, u.Name).Do()
+					if err == nil {
+						err = sqladminOperationWait(config, op, project, "Delete default root User")
+					}
+					return err
+				})
 				if err != nil {
 					return fmt.Errorf("Error, failed to delete default 'root'@'*' user, but the database was created successfully: %s", err)
-				}
-				err = sqladminOperationWait(config, op, project, "Delete default root User")
-				if err != nil {
-					return err
 				}
 			}
 		}
@@ -677,7 +686,7 @@ func resourceSqlDatabaseInstanceRead(d *schema.ResourceData, meta interface{}) e
 	}
 
 	d.Set("master_instance_name", strings.TrimPrefix(instance.MasterInstanceName, project+":"))
-
+	d.Set("project", project)
 	d.Set("self_link", instance.SelfLink)
 	d.SetId(instance.Name)
 
@@ -829,7 +838,7 @@ func resourceSqlDatabaseInstanceUpdate(d *schema.ResourceData, meta interface{})
 					if len(_oldIpConfList) > 0 {
 						_oldIpConf := _oldIpConfList[0].(map[string]interface{})
 						if ovp, ookp := _oldIpConf["authorized_networks"]; ookp {
-							_oldAuthorizedNetworkList = ovp.([]interface{})
+							_oldAuthorizedNetworkList = ovp.(*schema.Set).List()
 						}
 					}
 				}
@@ -840,7 +849,7 @@ func resourceSqlDatabaseInstanceUpdate(d *schema.ResourceData, meta interface{})
 
 					_authorizedNetworksList := make([]interface{}, 0)
 					if vp != nil {
-						_authorizedNetworksList = vp.([]interface{})
+						_authorizedNetworksList = vp.(*schema.Set).List()
 					}
 					_oipc_map := make(map[string]interface{})
 					for _, _ipc := range _oldAuthorizedNetworkList {
@@ -1044,7 +1053,7 @@ func flattenIpConfiguration(ipConfiguration *sqladmin.IpConfiguration) interface
 }
 
 func flattenAuthorizedNetworks(entries []*sqladmin.AclEntry) interface{} {
-	networks := make([]map[string]interface{}, 0, len(entries))
+	networks := schema.NewSet(schema.HashResource(sqlDatabaseAuthorizedNetWorkSchemaElem), []interface{}{})
 
 	for _, entry := range entries {
 		data := map[string]interface{}{
@@ -1053,7 +1062,7 @@ func flattenAuthorizedNetworks(entries []*sqladmin.AclEntry) interface{} {
 			"value":           entry.Value,
 		}
 
-		networks = append(networks, data)
+		networks.Add(data)
 	}
 
 	return networks

@@ -12,12 +12,14 @@ import (
 )
 
 func TestAccGoogleSqlDatabase_basic(t *testing.T) {
+	t.Parallel()
+
 	var database sqladmin.Database
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleSqlDatabaseInstanceDestroy,
+		CheckDestroy: testAccGoogleSqlDatabaseDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: fmt.Sprintf(
@@ -34,6 +36,8 @@ func TestAccGoogleSqlDatabase_basic(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabase_update(t *testing.T) {
+	t.Parallel()
+
 	var database sqladmin.Database
 
 	instance_name := acctest.RandString(10)
@@ -42,7 +46,7 @@ func TestAccGoogleSqlDatabase_update(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccGoogleSqlDatabaseInstanceDestroy,
+		CheckDestroy: testAccGoogleSqlDatabaseDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
 				Config: fmt.Sprintf(

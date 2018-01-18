@@ -10,6 +10,7 @@ import (
 )
 
 func TestAccPubsubTopicCreate(t *testing.T) {
+	t.Parallel()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -17,7 +18,7 @@ func TestAccPubsubTopicCreate(t *testing.T) {
 		CheckDestroy: testAccCheckPubsubTopicDestroy,
 		Steps: []resource.TestStep{
 			resource.TestStep{
-				Config: testAccPubsubTopic,
+				Config: testAccPubsubTopic(),
 				Check: resource.ComposeTestCheckFunc(
 					testAccPubsubTopicExists(
 						"google_pubsub_topic.foobar"),
@@ -63,7 +64,9 @@ func testAccPubsubTopicExists(n string) resource.TestCheckFunc {
 	}
 }
 
-var testAccPubsubTopic = fmt.Sprintf(`
+func testAccPubsubTopic() string {
+	return fmt.Sprintf(`
 resource "google_pubsub_topic" "foobar" {
 	name = "pstopic-test-%s"
 }`, acctest.RandString(10))
+}

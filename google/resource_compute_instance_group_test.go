@@ -12,6 +12,8 @@ import (
 )
 
 func TestAccComputeInstanceGroup_basic(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -29,11 +31,18 @@ func TestAccComputeInstanceGroup_basic(t *testing.T) {
 						"google_compute_instance_group.empty", &instanceGroup),
 				),
 			},
+			{
+				ResourceName:      "google_compute_instance_group.basic",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
 		},
 	})
 }
 
 func TestAccComputeInstanceGroup_update(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -71,6 +80,8 @@ func TestAccComputeInstanceGroup_update(t *testing.T) {
 }
 
 func TestAccComputeInstanceGroup_outOfOrderInstances(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 
@@ -91,6 +102,8 @@ func TestAccComputeInstanceGroup_outOfOrderInstances(t *testing.T) {
 }
 
 func TestAccComputeInstanceGroup_network(t *testing.T) {
+	t.Parallel()
+
 	var instanceGroup compute.InstanceGroup
 	var instanceName = fmt.Sprintf("instancegroup-test-%s", acctest.RandString(10))
 

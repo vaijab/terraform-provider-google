@@ -23,17 +23,17 @@ resource "google_compute_region_backend_service" "foobar" {
   session_affinity = "CLIENT_IP"
 
   backend {
-    group = "${google_compute_instance_group_manager.foo.instance_group}"
+    group = "${google_compute_region_instance_group_manager.foo.instance_group}"
   }
 
   health_checks = ["${google_compute_health_check.default.self_link}"]
 }
 
-resource "google_compute_instance_group_manager" "foo" {
+resource "google_compute_region_instance_group_manager" "foo" {
   name               = "terraform-test"
   instance_template  = "${google_compute_instance_template.foobar.self_link}"
   base_instance_name = "foobar"
-  zone               = "us-central1-f"
+  region             = "us-central1"
   target_size        = 1
 }
 
@@ -102,28 +102,10 @@ The following arguments are supported:
 The `backend` block supports:
 
 * `group` - (Required) The name or URI of a Compute Engine instance group
-    (`google_compute_instance_group_manager.xyz.instance_group`) that can
+    (`google_compute_region_instance_group_manager.xyz.instance_group`) that can
     receive traffic. Instance groups must contain at least one instance.
 
-* `balancing_mode` - (Optional) Defines the strategy for balancing load.
-    Defaults to `UTILIZATION`
-
-* `capacity_scaler` - (Optional) A float in the range [0, 1.0] that scales the
-    maximum parameters for the group (e.g., max rate). A value of 0.0 will cause
-    no requests to be sent to the group (i.e., it adds the group in a drained
-    state). The default is 1.0.
-
 * `description` - (Optional) Textual description for the backend.
-
-* `max_rate` - (Optional) Maximum requests per second (RPS) that the group can
-    handle.
-
-* `max_rate_per_instance` - (Optional) The maximum per-instance requests per
-    second (RPS).
-
-* `max_utilization` - (Optional) The target CPU utilization for the group as a
-    float in the range [0.0, 1.0]. This flag can only be provided when the
-    balancing mode is `UTILIZATION`. Defaults to `0.8`.
 
 ## Attributes Reference
 

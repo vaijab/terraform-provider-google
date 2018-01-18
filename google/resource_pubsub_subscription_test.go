@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccPubsubSubscription_basic(t *testing.T) {
+	t.Parallel()
+
 	topic := fmt.Sprintf("tf-test-topic-%s", acctest.RandString(10))
 	subscription := fmt.Sprintf("tf-test-sub-%s", acctest.RandString(10))
 
@@ -89,4 +91,32 @@ resource "google_pubsub_subscription" "foobar_sub" {
 	topic                = "${google_pubsub_topic.foobar_sub.name}"
 	ack_deadline_seconds = 20
 }`, topic, subscription)
+}
+
+func TestGetComputedTopicName(t *testing.T) {
+	type testData struct {
+		project  string
+		topic    string
+		expected string
+	}
+
+	var testCases = []testData{
+		testData{
+			project:  "my-project",
+			topic:    "my-topic",
+			expected: "projects/my-project/topics/my-topic",
+		},
+		testData{
+			project:  "my-project",
+			topic:    "projects/another-project/topics/my-topic",
+			expected: "projects/another-project/topics/my-topic",
+		},
+	}
+
+	for _, testCase := range testCases {
+		computedTopicName := getComputedTopicName(testCase.project, testCase.topic)
+		if computedTopicName != testCase.expected {
+			t.Fatalf("bad computed topic name: %s' => expected %s", computedTopicName, testCase.expected)
+		}
+	}
 }

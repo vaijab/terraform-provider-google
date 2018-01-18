@@ -86,6 +86,14 @@ The following arguments are supported:
 In addition to the arguments listed above, the following computed attributes are
 exported:
 
-* `id` - A unique ID assigned by GCE.
+* `proxy_id` - A unique ID assigned by GCE.
 
 * `self_link` - The URI of the created resource.
+
+## Import
+
+Target HTTP Proxy can be imported using the `name`, e.g.
+
+```
+$ terraform import compute_target_http_proxy.foobar foobar
+```

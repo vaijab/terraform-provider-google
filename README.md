@@ -2,9 +2,18 @@ Terraform Provider for Google Cloud Platform
 ==================
 
 - Website: https://www.terraform.io
+- Documentation: https://www.terraform.io/docs/providers/google/index.html
 - [![Gitter chat](https://badges.gitter.im/hashicorp-terraform/Lobby.png)](https://gitter.im/hashicorp-terraform/Lobby)
 - Mailing list: [Google Groups](http://groups.google.com/group/terraform-tool)
 <img src="https://cdn.rawgit.com/hashicorp/terraform-website/master/content/source/assets/images/logo-hashicorp.svg" width="600px">
+
+Maintainers
+-----------
+
+This provider plugin is maintained by:
+
+* The [Google Cloud Graphite Team](https://cloudplatform.googleblog.com/2017/03/partnering-on-open-source-Google-and-HashiCorp-engineers-on-managing-GCP-infrastructure.html) at Google
+* The Terraform team at [HashiCorp](https://www.hashicorp.com/)
 
 Requirements
 ------------
@@ -33,6 +42,11 @@ Using the provider
 ----------------------
 
 See the [Google Provider documentation](https://www.terraform.io/docs/providers/google/index.html) to get started using the Google provider.
+
+Upgrading the provider
+----------------------
+
+To upgrade to the latest stable version of the Google provider run `terraform init -upgrade`. See the [Terraform website](https://www.terraform.io/docs/configuration/providers.html#provider-versions) for more information.
 
 Developing the Provider
 ---------------------------

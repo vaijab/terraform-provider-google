@@ -11,9 +11,13 @@ import (
 
 // Test that a service account resource can be created, updated, and destroyed
 func TestAccGoogleServiceAccount_basic(t *testing.T) {
+	t.Parallel()
+
 	accountId := "a" + acctest.RandString(10)
+	uniqueId := ""
 	displayName := "Terraform Test"
 	displayName2 := "Terraform Test Update"
+	project := getTestProjectFromEnv()
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
 		Providers: testAccProviders,
@@ -23,6 +27,8 @@ func TestAccGoogleServiceAccount_basic(t *testing.T) {
 				Config: testAccGoogleServiceAccountBasic(accountId, displayName),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckGoogleServiceAccountExists("google_service_account.acceptance"),
+					resource.TestCheckResourceAttr(
+						"google_service_account.acceptance", "project", project),
 				),
 			},
 			// The second step updates the service account
@@ -30,6 +36,21 @@ func TestAccGoogleServiceAccount_basic(t *testing.T) {
 				Config: testAccGoogleServiceAccountBasic(accountId, displayName2),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckGoogleServiceAccountNameModified("google_service_account.acceptance", displayName2),
+					resource.TestCheckResourceAttr(
+						"google_service_account.acceptance", "project", project),
+					testAccStoreServiceAccountUniqueId(&uniqueId),
+				),
+			},
+			// The third step explicitely adds the same default project to the service account configuration
+			// and ensure the service account is not recreated by comparing the value of its unique_id with the one from the previous step
+			resource.TestStep{
+				Config: testAccGoogleServiceAccountWithProject(project, accountId, displayName2),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckGoogleServiceAccountNameModified("google_service_account.acceptance", displayName2),
+					resource.TestCheckResourceAttr(
+						"google_service_account.acceptance", "project", project),
+					resource.TestCheckResourceAttrPtr(
+						"google_service_account.acceptance", "unique_id", &uniqueId),
 				),
 			},
 		},
@@ -39,6 +60,8 @@ func TestAccGoogleServiceAccount_basic(t *testing.T) {
 // Test that a service account resource can be created with a policy, updated,
 // and destroyed.
 func TestAccGoogleServiceAccount_createPolicy(t *testing.T) {
+	t.Parallel()
+
 	accountId := "a" + acctest.RandString(10)
 	displayName := "Terraform Test"
 	resource.Test(t, resource.TestCase{
@@ -68,6 +91,13 @@ func TestAccGoogleServiceAccount_createPolicy(t *testing.T) {
 			},
 		},
 	})
+}
+
+func testAccStoreServiceAccountUniqueId(uniqueId *string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		*uniqueId = s.RootModule().Resources["google_service_account.acceptance"].Primary.Attributes["unique_id"]
+		return nil
+	}
 }
 
 func testAccCheckGoogleServiceAccountPolicyCount(r string, n int) resource.TestCheckFunc {
@@ -122,7 +152,16 @@ func testAccGoogleServiceAccountBasic(account, name string) string {
 	return fmt.Sprintf(t, account, name)
 }
 
-func testAccGoogleServiceAccountPolicy(account, name string) string {
+func testAccGoogleServiceAccountWithProject(project, account, name string) string {
+	t := `resource "google_service_account" "acceptance" {
+    project = "%v"
+    account_id = "%v"
+    display_name = "%v"
+ }`
+	return fmt.Sprintf(t, project, account, name)
+}
+
+func testAccGoogleServiceAccountPolicy(account, project string) string {
 
 	t := `resource "google_service_account" "acceptance" {
     account_id = "%v"
@@ -139,5 +178,5 @@ data "google_iam_policy" "service_account" {
   }
 }`
 
-	return fmt.Sprintf(t, account, name, account, getTestProjectFromEnv())
+	return fmt.Sprintf(t, account, account, account, project)
 }

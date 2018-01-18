@@ -23,6 +23,10 @@ func resourceComputeGlobalForwardingRule() *schema.Resource {
 		Update: resourceComputeGlobalForwardingRuleUpdate,
 		Delete: resourceComputeGlobalForwardingRuleDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -69,9 +73,10 @@ func resourceComputeGlobalForwardingRule() *schema.Resource {
 			},
 
 			"port_range": &schema.Schema{
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: portRangeDiffSuppress,
 			},
 
 			"ip_version": &schema.Schema{
@@ -84,6 +89,7 @@ func resourceComputeGlobalForwardingRule() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -150,7 +156,7 @@ func resourceComputeGlobalForwardingRuleCreate(d *schema.ResourceData, meta inte
 	// It probably maybe worked, so store the ID now
 	d.SetId(frule.Name)
 
-	err = computeSharedOperationWait(config, op, project, "Creating Global Fowarding Rule")
+	err = computeSharedOperationWait(config.clientCompute, op, project, "Creating Global Fowarding Rule")
 	if err != nil {
 		return err
 	}
@@ -216,7 +222,7 @@ func resourceComputeGlobalForwardingRuleUpdate(d *schema.ResourceData, meta inte
 			}
 		}
 
-		err = computeSharedOperationWait(config, op, project, "Updating Global Forwarding Rule")
+		err = computeSharedOperationWait(config.clientCompute, op, project, "Updating Global Forwarding Rule")
 		if err != nil {
 			return err
 		}
@@ -273,12 +279,17 @@ func resourceComputeGlobalForwardingRuleRead(d *schema.ResourceData, meta interf
 		}
 	}
 
+	d.Set("name", frule.Name)
+	d.Set("description", frule.Description)
+	d.Set("target", frule.Target)
+	d.Set("port_range", frule.PortRange)
 	d.Set("ip_address", frule.IPAddress)
 	d.Set("ip_protocol", frule.IPProtocol)
 	d.Set("ip_version", frule.IpVersion)
 	d.Set("self_link", ConvertSelfLinkToV1(frule.SelfLink))
 	d.Set("labels", frule.Labels)
 	d.Set("label_fingerprint", frule.LabelFingerprint)
+	d.Set("project", project)
 
 	return nil
 }
@@ -308,7 +319,7 @@ func resourceComputeGlobalForwardingRuleDelete(d *schema.ResourceData, meta inte
 		}
 	}
 
-	err = computeSharedOperationWait(config, op, project, "Deleting GlobalForwarding Rule")
+	err = computeSharedOperationWait(config.clientCompute, op, project, "Deleting GlobalForwarding Rule")
 	if err != nil {
 		return err
 	}
@@ -358,7 +369,7 @@ func resourceComputeGlobalForwardingRuleSetLabels(config *Config, computeApiVers
 			computeApiVersion)
 	}
 
-	err = computeSharedOperationWait(config, op, project, "Setting labels on Global Forwarding Rule")
+	err = computeSharedOperationWait(config.clientCompute, op, project, "Setting labels on Global Forwarding Rule")
 	if err != nil {
 		return err
 	}

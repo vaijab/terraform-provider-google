@@ -44,6 +44,7 @@ func resourceComputeImage() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -166,7 +167,7 @@ func resourceComputeImageCreate(d *schema.ResourceData, meta interface{}) error 
 	// Store the ID
 	d.SetId(image.Name)
 
-	err = computeOperationWaitTime(config, op, project, "Creating Image", createTimeout)
+	err = computeOperationWaitTime(config.clientCompute, op, project, "Creating Image", createTimeout)
 	if err != nil {
 		return err
 	}
@@ -204,6 +205,7 @@ func resourceComputeImageRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("self_link", image.SelfLink)
 	d.Set("labels", image.Labels)
 	d.Set("label_fingerprint", image.LabelFingerprint)
+	d.Set("project", project)
 
 	return nil
 }
@@ -235,7 +237,7 @@ func resourceComputeImageUpdate(d *schema.ResourceData, meta interface{}) error 
 
 		d.SetPartial("labels")
 
-		err = computeOperationWaitTime(config, op, project, "Setting labels", 4)
+		err = computeOperationWaitTime(config.clientCompute, op, project, "Setting labels", 4)
 		if err != nil {
 			return err
 		}
@@ -268,7 +270,7 @@ func resourceComputeImageDelete(d *schema.ResourceData, meta interface{}) error 
 		return fmt.Errorf("Error deleting image: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting image")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting image")
 	if err != nil {
 		return err
 	}

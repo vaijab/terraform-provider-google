@@ -56,6 +56,7 @@ func resourceComputeHttpsHealthCheck() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -133,7 +134,7 @@ func resourceComputeHttpsHealthCheckCreate(d *schema.ResourceData, meta interfac
 	// It probably maybe worked, so store the ID now
 	d.SetId(hchk.Name)
 
-	err = computeOperationWait(config, op, project, "Creating Https Health Check")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating Https Health Check")
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func resourceComputeHttpsHealthCheckUpdate(d *schema.ResourceData, meta interfac
 	// It probably maybe worked, so store the ID now
 	d.SetId(hchk.Name)
 
-	err = computeOperationWait(config, op, project, "Updating Https Health Check")
+	err = computeOperationWait(config.clientCompute, op, project, "Updating Https Health Check")
 	if err != nil {
 		return err
 	}
@@ -220,6 +221,7 @@ func resourceComputeHttpsHealthCheckRead(d *schema.ResourceData, meta interface{
 	d.Set("port", hchk.Port)
 	d.Set("timeout_sec", hchk.TimeoutSec)
 	d.Set("unhealthy_threshold", hchk.UnhealthyThreshold)
+	d.Set("project", project)
 	d.Set("self_link", hchk.SelfLink)
 
 	return nil
@@ -240,7 +242,7 @@ func resourceComputeHttpsHealthCheckDelete(d *schema.ResourceData, meta interfac
 		return fmt.Errorf("Error deleting HttpsHealthCheck: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Https Health Check")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Https Health Check")
 	if err != nil {
 		return err
 	}

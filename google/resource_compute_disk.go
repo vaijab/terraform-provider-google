@@ -5,6 +5,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
 	"google.golang.org/api/compute/v1"
@@ -29,6 +30,12 @@ func resourceComputeDisk() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(5 * time.Minute),
+			Update: schema.DefaultTimeout(5 * time.Minute),
+			Delete: schema.DefaultTimeout(5 * time.Minute),
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -38,7 +45,8 @@ func resourceComputeDisk() *schema.Resource {
 
 			"zone": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -58,12 +66,13 @@ func resourceComputeDisk() *schema.Resource {
 				Type:             schema.TypeString,
 				Optional:         true,
 				ForceNew:         true,
-				DiffSuppressFunc: linkDiffSuppress,
+				DiffSuppressFunc: diskImageDiffSuppress,
 			},
 
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -122,12 +131,16 @@ func resourceComputeDiskCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	// Get the zone
-	log.Printf("[DEBUG] Loading zone: %s", d.Get("zone").(string))
+	z, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
+	log.Printf("[DEBUG] Loading zone: %s", z)
 	zone, err := config.clientCompute.Zones.Get(
-		project, d.Get("zone").(string)).Do()
+		project, z).Do()
 	if err != nil {
 		return fmt.Errorf(
-			"Error loading zone '%s': %s", d.Get("zone").(string), err)
+			"Error loading zone '%s': %s", z, err)
 	}
 
 	// Build the disk parameter
@@ -191,7 +204,7 @@ func resourceComputeDiskCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	op, err := config.clientCompute.Disks.Insert(
-		project, d.Get("zone").(string), disk).Do()
+		project, z, disk).Do()
 	if err != nil {
 		return fmt.Errorf("Error creating disk: %s", err)
 	}
@@ -199,7 +212,7 @@ func resourceComputeDiskCreate(d *schema.ResourceData, meta interface{}) error {
 	// It probably maybe worked, so store the ID now
 	d.SetId(disk.Name)
 
-	err = computeOperationWait(config, op, project, "Creating Disk")
+	err = computeOperationWaitTime(config.clientCompute, op, project, "Creating Disk", int(d.Timeout(schema.TimeoutCreate).Minutes()))
 	if err != nil {
 		return err
 	}
@@ -213,19 +226,23 @@ func resourceComputeDiskUpdate(d *schema.ResourceData, meta interface{}) error {
 	if err != nil {
 		return err
 	}
+	z, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	d.Partial(true)
 	if d.HasChange("size") {
 		rb := &compute.DisksResizeRequest{
 			SizeGb: int64(d.Get("size").(int)),
 		}
 		op, err := config.clientCompute.Disks.Resize(
-			project, d.Get("zone").(string), d.Id(), rb).Do()
+			project, z, d.Id(), rb).Do()
 		if err != nil {
 			return fmt.Errorf("Error resizing disk: %s", err)
 		}
 		d.SetPartial("size")
 
-		err = computeOperationWait(config, op, project, "Resizing Disk")
+		err = computeOperationWaitTime(config.clientCompute, op, project, "Resizing Disk", int(d.Timeout(schema.TimeoutUpdate).Minutes()))
 		if err != nil {
 			return err
 		}
@@ -237,13 +254,13 @@ func resourceComputeDiskUpdate(d *schema.ResourceData, meta interface{}) error {
 			LabelFingerprint: d.Get("label_fingerprint").(string),
 		}
 		op, err := config.clientCompute.Disks.SetLabels(
-			project, d.Get("zone").(string), d.Id(), &zslr).Do()
+			project, z, d.Id(), &zslr).Do()
 		if err != nil {
 			return fmt.Errorf("Error when setting labels: %s", err)
 		}
 		d.SetPartial("labels")
 
-		err = computeOperationWait(config, op, project, "Setting labels on disk")
+		err = computeOperationWaitTime(config.clientCompute, op, project, "Setting labels on disk", int(d.Timeout(schema.TimeoutUpdate).Minutes()))
 		if err != nil {
 			return err
 		}
@@ -271,9 +288,9 @@ func resourceComputeDiskRead(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	var disk *compute.Disk
-	if zone, ok := d.GetOk("zone"); ok {
+	if zone, _ := getZone(d, config); zone != "" {
 		disk, err = config.clientCompute.Disks.Get(
-			project, zone.(string), d.Id()).Do()
+			project, zone, d.Id()).Do()
 		if err != nil {
 			return handleNotFoundError(err, d, fmt.Sprintf("Disk %q", d.Get("name").(string)))
 		}
@@ -290,12 +307,10 @@ func resourceComputeDiskRead(d *schema.ResourceData, meta interface{}) error {
 		disk = resource.(*compute.Disk)
 	}
 
-	zoneUrlParts := strings.Split(disk.Zone, "/")
-	typeUrlParts := strings.Split(disk.Type, "/")
 	d.Set("name", disk.Name)
 	d.Set("self_link", disk.SelfLink)
-	d.Set("type", typeUrlParts[len(typeUrlParts)-1])
-	d.Set("zone", zoneUrlParts[len(zoneUrlParts)-1])
+	d.Set("type", GetResourceNameFromSelfLink(disk.Type))
+	d.Set("zone", GetResourceNameFromSelfLink(disk.Zone))
 	d.Set("size", disk.SizeGb)
 	d.Set("users", disk.Users)
 	if disk.DiskEncryptionKey != nil && disk.DiskEncryptionKey.Sha256 != "" {
@@ -306,6 +321,7 @@ func resourceComputeDiskRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("snapshot", disk.SourceSnapshot)
 	d.Set("labels", disk.Labels)
 	d.Set("label_fingerprint", disk.LabelFingerprint)
+	d.Set("project", project)
 
 	return nil
 }
@@ -314,6 +330,10 @@ func resourceComputeDiskDelete(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
 	project, err := getProject(d, config)
+	if err != nil {
+		return err
+	}
+	z, err := getZone(d, config)
 	if err != nil {
 		return err
 	}
@@ -341,10 +361,9 @@ func resourceComputeDiskDelete(d *schema.ResourceData, meta interface{}) error {
 			}
 			for _, disk := range i.Disks {
 				if disk.Source == self {
-					zoneParts := strings.Split(i.Zone, "/")
 					detachCalls = append(detachCalls, detachArgs{
 						project:    project,
-						zone:       zoneParts[len(zoneParts)-1],
+						zone:       GetResourceNameFromSelfLink(i.Zone),
 						instance:   i.Name,
 						deviceName: disk.DeviceName,
 					})
@@ -357,7 +376,7 @@ func resourceComputeDiskDelete(d *schema.ResourceData, meta interface{}) error {
 				return fmt.Errorf("Error detaching disk %s from instance %s/%s/%s: %s", call.deviceName, call.project,
 					call.zone, call.instance, err.Error())
 			}
-			err = computeOperationWait(config, op, call.project,
+			err = computeOperationWait(config.clientCompute, op, call.project,
 				fmt.Sprintf("Detaching disk from %s/%s/%s", call.project, call.zone, call.instance))
 			if err != nil {
 				return err
@@ -367,7 +386,7 @@ func resourceComputeDiskDelete(d *schema.ResourceData, meta interface{}) error {
 
 	// Delete the disk
 	op, err := config.clientCompute.Disks.Delete(
-		project, d.Get("zone").(string), d.Id()).Do()
+		project, z, d.Id()).Do()
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 404 {
 			log.Printf("[WARN] Removing Disk %q because it's gone", d.Get("name").(string))
@@ -378,11 +397,102 @@ func resourceComputeDiskDelete(d *schema.ResourceData, meta interface{}) error {
 		return fmt.Errorf("Error deleting disk: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Disk")
+	err = computeOperationWaitTime(config.clientCompute, op, project, "Deleting Disk", int(d.Timeout(schema.TimeoutDelete).Minutes()))
 	if err != nil {
 		return err
 	}
 
 	d.SetId("")
 	return nil
+}
+
+// We cannot suppress the diff for the case when family name is not part of the image name since we can't
+// make a network call in a DiffSuppressFunc.
+func diskImageDiffSuppress(_, old, new string, _ *schema.ResourceData) bool {
+	// 'old' is read from the API.
+	// It always has the format 'https://www.googleapis.com/compute/v1/projects/(%s)/global/images/(%s)'
+	matches := resolveImageLink.FindStringSubmatch(old)
+	if matches == nil {
+		// Image read from the API doesn't have the expected format. In practice, it should never happen
+		return false
+	}
+	oldProject := matches[1]
+	oldName := matches[2]
+
+	// Partial or full self link family
+	if resolveImageProjectFamily.MatchString(new) {
+		// Value matches pattern "projects/{project}/global/images/family/{family-name}$"
+		matches := resolveImageProjectFamily.FindStringSubmatch(new)
+		newProject := matches[1]
+		newFamilyName := matches[2]
+
+		return diskImageProjectNameEquals(oldProject, oldName, newProject, newFamilyName)
+	}
+
+	// Partial or full self link image
+	if resolveImageProjectImage.MatchString(new) {
+		// Value matches pattern "projects/{project}/global/images/{image-name}$"
+		// or "projects/{project}/global/images/{image-name-latest}$"
+		matches := resolveImageProjectImage.FindStringSubmatch(new)
+		newProject := matches[1]
+		newImageName := matches[2]
+
+		return diskImageProjectNameEquals(oldProject, oldName, newProject, newImageName)
+	}
+
+	// Partial link without project family
+	if resolveImageGlobalFamily.MatchString(new) {
+		// Value is "global/images/family/{family-name}"
+		matches := resolveImageGlobalFamily.FindStringSubmatch(new)
+		familyName := matches[1]
+
+		return strings.Contains(oldName, familyName)
+	}
+
+	// Partial link without project image
+	if resolveImageGlobalImage.MatchString(new) {
+		// Value is "global/images/family/{image-name}" or "global/images/family/{image-name-latest}"
+		matches := resolveImageGlobalImage.FindStringSubmatch(new)
+		imageName := matches[1]
+
+		return strings.Contains(oldName, imageName)
+	}
+
+	// Family shorthand
+	if resolveImageFamilyFamily.MatchString(new) {
+		// Value is "family/{family-name}"
+		matches := resolveImageFamilyFamily.FindStringSubmatch(new)
+		familyName := matches[1]
+
+		return strings.Contains(oldName, familyName)
+	}
+
+	// Shorthand for image
+	if resolveImageProjectImageShorthand.MatchString(new) {
+		// Value is "{project}/{image-name}" or "{project}/{image-name-latest}"
+		matches := resolveImageProjectImageShorthand.FindStringSubmatch(new)
+		newProject := matches[1]
+		newName := matches[2]
+
+		return diskImageProjectNameEquals(oldProject, oldName, newProject, newName)
+	}
+
+	// Image or family only
+	if strings.Contains(oldName, new) {
+		// Value is "{image-name}" or "{family-name}" or "{image-name-latest}"
+		return true
+	}
+
+	return false
+}
+
+func diskImageProjectNameEquals(project1, name1, project2, name2 string) bool {
+	// Convert short project name to full name
+	// For instance, centos => centos-cloud
+	fullProjectName, ok := imageMap[project2]
+	if ok {
+		project2 = fullProjectName
+	}
+
+	return project1 == project2 && strings.Contains(name1, name2)
 }

@@ -33,7 +33,8 @@ func resourceComputeInstanceGroup() *schema.Resource {
 
 			"zone": {
 				Type:     schema.TypeString,
-				Required: true,
+				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -79,6 +80,7 @@ func resourceComputeInstanceGroup() *schema.Resource {
 			"project": {
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -121,7 +123,10 @@ func resourceComputeInstanceGroupCreate(d *schema.ResourceData, meta interface{}
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	name := d.Get("name").(string)
 
 	// Build the parameter
@@ -153,7 +158,7 @@ func resourceComputeInstanceGroupCreate(d *schema.ResourceData, meta interface{}
 	d.SetId(fmt.Sprintf("%s/%s", zone, name))
 
 	// Wait for the operation to complete
-	err = computeOperationWait(config, op, project, "Creating InstanceGroup")
+	err = computeOperationWait(config.clientCompute, op, project, "Creating InstanceGroup")
 	if err != nil {
 		d.SetId("")
 		return err
@@ -177,7 +182,7 @@ func resourceComputeInstanceGroupCreate(d *schema.ResourceData, meta interface{}
 		}
 
 		// Wait for the operation to complete
-		err = computeOperationWait(config, op, project, "Adding instances to InstanceGroup")
+		err = computeOperationWait(config.clientCompute, op, project, "Adding instances to InstanceGroup")
 		if err != nil {
 			return err
 		}
@@ -194,7 +199,10 @@ func resourceComputeInstanceGroupRead(d *schema.ResourceData, meta interface{}) 
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	name := d.Get("name").(string)
 
 	// retrieve instance group
@@ -232,6 +240,8 @@ func resourceComputeInstanceGroupRead(d *schema.ResourceData, meta interface{}) 
 	// Set computed fields
 	d.Set("network", instanceGroup.Network)
 	d.Set("size", instanceGroup.Size)
+	d.Set("project", project)
+	d.Set("zone", zone)
 	d.Set("self_link", instanceGroup.SelfLink)
 
 	return nil
@@ -244,7 +254,10 @@ func resourceComputeInstanceGroupUpdate(d *schema.ResourceData, meta interface{}
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	name := d.Get("name").(string)
 
 	d.Partial(true)
@@ -281,7 +294,7 @@ func resourceComputeInstanceGroupUpdate(d *schema.ResourceData, meta interface{}
 				}
 			} else {
 				// Wait for the operation to complete
-				err = computeOperationWait(config, removeOp, project, "Updating InstanceGroup")
+				err = computeOperationWait(config.clientCompute, removeOp, project, "Updating InstanceGroup")
 				if err != nil {
 					return err
 				}
@@ -302,7 +315,7 @@ func resourceComputeInstanceGroupUpdate(d *schema.ResourceData, meta interface{}
 			}
 
 			// Wait for the operation to complete
-			err = computeOperationWait(config, addOp, project, "Updating InstanceGroup")
+			err = computeOperationWait(config.clientCompute, addOp, project, "Updating InstanceGroup")
 			if err != nil {
 				return err
 			}
@@ -325,7 +338,7 @@ func resourceComputeInstanceGroupUpdate(d *schema.ResourceData, meta interface{}
 			return fmt.Errorf("Error updating named ports for InstanceGroup: %s", err)
 		}
 
-		err = computeOperationWait(config, op, project, "Updating InstanceGroup")
+		err = computeOperationWait(config.clientCompute, op, project, "Updating InstanceGroup")
 		if err != nil {
 			return err
 		}
@@ -345,14 +358,17 @@ func resourceComputeInstanceGroupDelete(d *schema.ResourceData, meta interface{}
 		return err
 	}
 
-	zone := d.Get("zone").(string)
+	zone, err := getZone(d, config)
+	if err != nil {
+		return err
+	}
 	name := d.Get("name").(string)
 	op, err := config.clientCompute.InstanceGroups.Delete(project, zone, name).Do()
 	if err != nil {
 		return fmt.Errorf("Error deleting InstanceGroup: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting InstanceGroup")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting InstanceGroup")
 	if err != nil {
 		return err
 	}

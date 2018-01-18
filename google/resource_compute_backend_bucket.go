@@ -15,6 +15,10 @@ func resourceComputeBackendBucket() *schema.Resource {
 		Update: resourceComputeBackendBucketUpdate,
 		Delete: resourceComputeBackendBucketDelete,
 
+		Importer: &schema.ResourceImporter{
+			State: schema.ImportStatePassthrough,
+		},
+
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
 				Type:         schema.TypeString,
@@ -42,6 +46,7 @@ func resourceComputeBackendBucket() *schema.Resource {
 			"project": &schema.Schema{
 				Type:     schema.TypeString,
 				Optional: true,
+				Computed: true,
 				ForceNew: true,
 			},
 
@@ -87,7 +92,7 @@ func resourceComputeBackendBucketCreate(d *schema.ResourceData, meta interface{}
 	d.SetId(bucket.Name)
 
 	// Wait for the operation to complete
-	waitErr := computeOperationWait(config, op, project, "Creating Backend Bucket")
+	waitErr := computeOperationWait(config.clientCompute, op, project, "Creating Backend Bucket")
 	if waitErr != nil {
 		// The resource didn't actually create
 		d.SetId("")
@@ -111,9 +116,11 @@ func resourceComputeBackendBucketRead(d *schema.ResourceData, meta interface{}) 
 		return handleNotFoundError(err, d, fmt.Sprintf("Backend Bucket %q", d.Get("name").(string)))
 	}
 
+	d.Set("name", bucket.Name)
 	d.Set("bucket_name", bucket.BucketName)
 	d.Set("description", bucket.Description)
 	d.Set("enable_cdn", bucket.EnableCdn)
+	d.Set("project", project)
 	d.Set("self_link", bucket.SelfLink)
 
 	return nil
@@ -150,7 +157,7 @@ func resourceComputeBackendBucketUpdate(d *schema.ResourceData, meta interface{}
 
 	d.SetId(bucket.Name)
 
-	err = computeOperationWait(config, op, project, "Updating Backend Bucket")
+	err = computeOperationWait(config.clientCompute, op, project, "Updating Backend Bucket")
 	if err != nil {
 		return err
 	}
@@ -173,7 +180,7 @@ func resourceComputeBackendBucketDelete(d *schema.ResourceData, meta interface{}
 		return fmt.Errorf("Error deleting backend bucket: %s", err)
 	}
 
-	err = computeOperationWait(config, op, project, "Deleting Backend Bucket")
+	err = computeOperationWait(config.clientCompute, op, project, "Deleting Backend Bucket")
 	if err != nil {
 		return err
 	}

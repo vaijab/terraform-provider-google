@@ -55,12 +55,16 @@ resource "google_container_cluster" "primary" {
 
 * `cluster` - (Required) The cluster to create the node pool for.
 
-* `initial_node_count` - (Required) The initial node count for the pool.
-
 - - -
 
-* `project` - (Optional) The project in which to create the node pool. If blank,
-    the provider-configured project will be used.
+* `autoscaling` - (Optional) Configuration required by cluster autoscaler to adjust
+    the size of the node pool to the current cluster usage. Structure is documented below.
+
+* `initial_node_count` - (Deprecated, Optional) The initial node count for the pool.
+    Use `node_count` instead.
+
+* `management` - (Optional) Node management configuration, wherein auto-repair and
+    auto-upgrade is configured. Structure is documented below.
 
 * `name` - (Optional) The name of the node pool. If left blank, Terraform will
     auto-generate a unique name.
@@ -68,53 +72,26 @@ resource "google_container_cluster" "primary" {
 * `name_prefix` - (Optional) Creates a unique name for the node pool beginning
     with the specified prefix. Conflicts with `name`.
 
-* `node_config` - (Optional) The machine type and image to use for all nodes in
-    this pool
+* `node_config` - (Optional) The node configuration of the pool. See
+    [google_container_cluster](container_cluster.html) for schema.
 
-* `autoscaling` - (Optional) Configuration required by cluster autoscaler to adjust
-    the size of the node pool to the current cluster usage. Structure is documented below.
+* `node_count` - (Optional) The number of nodes per instance group.
 
-**Node Config** supports the following arguments:
-
-* `machine_type` - (Optional) The name of a Google Compute Engine machine type.
-    Defaults to `n1-standard-1`.
-
-* `disk_size_gb` - (Optional) Size of the disk attached to each node, specified
-    in GB. The smallest allowed disk size is 10GB. Defaults to 100GB.
-
-* `local_ssd_count` - (Optional) The amount of local SSD disks that will be
-    attached to each node pool. Defaults to 0.
-
-* `oauth_scopes` - (Optional) The set of Google API scopes to be made available
-    on all of the node VMs under the "default" service account. These can be
-    either FQDNs, or scope aliases. The following scopes are necessary to ensure
-    the correct functioning of the node pool:
-
-  * `compute-rw` (`https://www.googleapis.com/auth/compute`)
-  * `storage-ro` (`https://www.googleapis.com/auth/devstorage.read_only`)
-  * `logging-write` (`https://www.googleapis.com/auth/logging.write`),
-    if `logging_service` points to Google
-  * `monitoring` (`https://www.googleapis.com/auth/monitoring`),
-    if `monitoring_service` points to Google
-
-* `service_account` - (Optional) The service account to be used by the Node VMs.
-    If not specified, the "default" service account is used.
-
-* `metadata` - (Optional) The metadata key/value pairs assigned to instances in
-    the node pool.
-
-* `image_type` - (Optional) The image type to use for this node.
-
-* `preemptible` - (Optional) A boolean that represents whether or not the underlying node VMs
-    are preemptible. See the [official documentation](https://cloud.google.com/container-engine/docs/preemptible-vm)
-    for more information. Defaults to false.
+* `project` - (Optional) The project in which to create the node pool. If blank,
+    the provider-configured project will be used.
 
 The `autoscaling` block supports:
 
-    * `min_node_count` - (Required) Minimum number of nodes in the NodePool. Must be >=1 and
+* `min_node_count` - (Required) Minimum number of nodes in the NodePool. Must be >=1 and
     <= `max_node_count`.
 
 * `max_node_count` - (Required) Maximum number of nodes in the NodePool. Must be >= min_node_count.
+
+The `management` block supports:
+
+* `auto_repair` - (Optional) Whether the nodes will be automatically repaired.
+
+* `auto_upgrade` - (Optional) Whether the nodes will be automatically upgraded.
 
 ## Import
 

@@ -13,6 +13,9 @@ import (
 
 // Test that an IAM binding can be applied to a project
 func TestAccGoogleProjectIamBinding_basic(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -41,6 +44,9 @@ func TestAccGoogleProjectIamBinding_basic(t *testing.T) {
 
 // Test that multiple IAM bindings can be applied to a project, one at a time
 func TestAccGoogleProjectIamBinding_multiple(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -83,6 +89,9 @@ func TestAccGoogleProjectIamBinding_multiple(t *testing.T) {
 
 // Test that multiple IAM bindings can be applied to a project all at once
 func TestAccGoogleProjectIamBinding_multipleAtOnce(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -115,6 +124,9 @@ func TestAccGoogleProjectIamBinding_multipleAtOnce(t *testing.T) {
 
 // Test that an IAM binding can be updated once applied to a project
 func TestAccGoogleProjectIamBinding_update(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -163,6 +175,9 @@ func TestAccGoogleProjectIamBinding_update(t *testing.T) {
 
 // Test that an IAM binding can be removed from a project
 func TestAccGoogleProjectIamBinding_remove(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },

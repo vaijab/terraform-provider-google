@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccComputeRouterPeer_basic(t *testing.T) {
+	t.Parallel()
+
 	testId := acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -20,6 +22,11 @@ func TestAccComputeRouterPeer_basic(t *testing.T) {
 				Config: testAccComputeRouterPeerBasic(testId),
 				Check: testAccCheckComputeRouterPeerExists(
 					"google_compute_router_peer.foobar"),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_router_peer.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 			resource.TestStep{
 				Config: testAccComputeRouterPeerKeepRouter(testId),

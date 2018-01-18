@@ -49,6 +49,8 @@ func testSweepDatabases(region string) error {
 		return nil
 	}
 
+	running := map[string]struct{}{}
+
 	for _, d := range found.Items {
 		var testDbInstance bool
 		for _, testName := range []string{"tf-lw-", "sqldatabasetest"} {
@@ -61,7 +63,18 @@ func testSweepDatabases(region string) error {
 		if !testDbInstance {
 			continue
 		}
+		if d.State != "RUNNABLE" {
+			continue
+		}
+		running[d.Name] = struct{}{}
+	}
 
+	for _, d := range found.Items {
+		// don't delete replicas, we'll take care of that
+		// when deleting the database they replicate
+		if d.ReplicaConfiguration != nil {
+			continue
+		}
 		log.Printf("Destroying SQL Instance (%s)", d.Name)
 
 		// replicas need to be stopped and destroyed before destroying a master
@@ -69,6 +82,12 @@ func testSweepDatabases(region string) error {
 		// and we call destroy on them before destroying the master
 		var ordering []string
 		for _, replicaName := range d.ReplicaNames {
+			// don't try to stop replicas that aren't running
+			if _, ok := running[replicaName]; !ok {
+				ordering = append(ordering, replicaName)
+				continue
+			}
+
 			// need to stop replication before being able to destroy a database
 			op, err := config.clientSqlAdmin.Instances.StopReplica(config.Project, replicaName).Do()
 
@@ -121,6 +140,8 @@ func testSweepDatabases(region string) error {
 }
 
 func TestAccGoogleSqlDatabaseInstance_basic(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseID := acctest.RandInt()
 
@@ -144,6 +165,8 @@ func TestAccGoogleSqlDatabaseInstance_basic(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_basic2(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 
 	resource.Test(t, resource.TestCase{
@@ -165,6 +188,8 @@ func TestAccGoogleSqlDatabaseInstance_basic2(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_basic3(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseID := acctest.RandInt()
 
@@ -190,6 +215,8 @@ func TestAccGoogleSqlDatabaseInstance_basic3(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_dontDeleteDefaultUserOnReplica(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseName := "sql-instance-test-" + acctest.RandString(10)
 	failoverName := "sql-instance-test-failover-" + acctest.RandString(10)
@@ -237,6 +264,8 @@ func TestAccGoogleSqlDatabaseInstance_dontDeleteDefaultUserOnReplica(t *testing.
 }
 
 func TestAccGoogleSqlDatabaseInstance_settings_basic(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseID := acctest.RandInt()
 
@@ -260,6 +289,8 @@ func TestAccGoogleSqlDatabaseInstance_settings_basic(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_slave(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	masterID := acctest.RandInt()
 	slaveID := acctest.RandInt()
@@ -288,6 +319,8 @@ func TestAccGoogleSqlDatabaseInstance_slave(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_diskspecs(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	masterID := acctest.RandInt()
 
@@ -311,6 +344,8 @@ func TestAccGoogleSqlDatabaseInstance_diskspecs(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_maintenance(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	masterID := acctest.RandInt()
 
@@ -334,6 +369,8 @@ func TestAccGoogleSqlDatabaseInstance_maintenance(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_settings_upgrade(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseID := acctest.RandInt()
 
@@ -367,6 +404,8 @@ func TestAccGoogleSqlDatabaseInstance_settings_upgrade(t *testing.T) {
 }
 
 func TestAccGoogleSqlDatabaseInstance_settings_downgrade(t *testing.T) {
+	t.Parallel()
+
 	var instance sqladmin.DatabaseInstance
 	databaseID := acctest.RandInt()
 
@@ -401,7 +440,10 @@ func TestAccGoogleSqlDatabaseInstance_settings_downgrade(t *testing.T) {
 
 // GH-4222
 func TestAccGoogleSqlDatabaseInstance_authNets(t *testing.T) {
+	t.Parallel(
 	// var instance sqladmin.DatabaseInstance
+	)
+
 	databaseID := acctest.RandInt()
 
 	resource.Test(t, resource.TestCase{
@@ -428,6 +470,8 @@ func TestAccGoogleSqlDatabaseInstance_authNets(t *testing.T) {
 // Tests that a SQL instance can be referenced from more than one other resource without
 // throwing an error during provisioning, see #9018.
 func TestAccGoogleSqlDatabaseInstance_multipleOperations(t *testing.T) {
+	t.Parallel()
+
 	databaseID, instanceID, userID := acctest.RandString(8), acctest.RandString(8), acctest.RandString(8)
 
 	resource.Test(t, resource.TestCase{
@@ -774,7 +818,7 @@ resource "google_sql_database_instance" "instance" {
 			authorized_networks {
 				value = "108.12.12.12"
 				name = "misc"
-				expiration_time = "2017-11-15T16:19:00.094Z"
+				expiration_time = "2050-11-15T16:19:00.094Z"
 			}
 		}
 
@@ -904,7 +948,7 @@ resource "google_sql_database_instance" "instance" {
 			authorized_networks {
 				value = "108.12.12.12"
 				name = "misc"
-				expiration_time = "2017-11-15T16:19:00.094Z"
+				expiration_time = "2050-11-15T16:19:00.094Z"
 			}
 		}
 	}

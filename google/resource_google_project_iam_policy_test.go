@@ -222,6 +222,9 @@ func TestSubtractIamPolicy(t *testing.T) {
 
 // Test that an IAM policy can be applied to a project
 func TestAccGoogleProjectIamPolicy_basic(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -254,8 +257,38 @@ func TestAccGoogleProjectIamPolicy_basic(t *testing.T) {
 	})
 }
 
+// Test that an IAM policy can be applied to a project when no project is set in the resource
+func TestAccGoogleProjectIamPolicy_defaultProject(t *testing.T) {
+	t.Parallel()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:  func() { testAccPreCheck(t) },
+		Providers: testAccProviders,
+		Steps: []resource.TestStep{
+			// Create a new project
+			resource.TestStep{
+				Config: testAccGoogleProjectDefaultAssociatePolicyBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccGoogleProjectExistingPolicy(getTestProjectFromEnv()),
+				),
+			},
+			// Apply an IAM policy from a data source. The application
+			// merges policies, so we validate the expected state.
+			resource.TestStep{
+				Config: testAccGoogleProjectDefaultAssociatePolicyBasic(),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckGoogleProjectIamPolicyIsMerged("google_project_iam_policy.acceptance", "data.google_iam_policy.admin", getTestProjectFromEnv()),
+				),
+			},
+		},
+	})
+}
+
 // Test that a non-collapsed IAM policy doesn't perpetually diff
 func TestAccGoogleProjectIamPolicy_expanded(t *testing.T) {
+	t.Parallel()
+
+	org := getTestOrgFromEnv(t)
 	pid := "terraform-" + acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:  func() { testAccPreCheck(t) },
@@ -627,6 +660,29 @@ func testAccGoogleProjectExistingPolicy(pid string) resource.TestCheckFunc {
 		}
 		return nil
 	}
+}
+
+func testAccGoogleProjectDefaultAssociatePolicyBasic() string {
+	return fmt.Sprintf(`
+resource "google_project_iam_policy" "acceptance" {
+    policy_data = "${data.google_iam_policy.admin.policy_data}"
+}
+data "google_iam_policy" "admin" {
+  binding {
+    role = "roles/storage.objectViewer"
+    members = [
+      "user:evanbrown@google.com",
+    ]
+  }
+  binding {
+    role = "roles/compute.instanceAdmin"
+    members = [
+      "user:evanbrown@google.com",
+      "user:evandbrown@gmail.com",
+    ]
+  }
+}
+`)
 }
 
 func testAccGoogleProjectAssociatePolicyBasic(pid, name, org string) string {

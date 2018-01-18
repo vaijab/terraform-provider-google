@@ -10,6 +10,8 @@ import (
 )
 
 func TestAccComputeRouterInterface_basic(t *testing.T) {
+	t.Parallel()
+
 	testId := acctest.RandString(10)
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
@@ -20,6 +22,11 @@ func TestAccComputeRouterInterface_basic(t *testing.T) {
 				Config: testAccComputeRouterInterfaceBasic(testId),
 				Check: testAccCheckComputeRouterInterfaceExists(
 					"google_compute_router_interface.foobar"),
+			},
+			resource.TestStep{
+				ResourceName:      "google_compute_router_interface.foobar",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 			resource.TestStep{
 				Config: testAccComputeRouterInterfaceKeepRouter(testId),
